@@ -1,0 +1,86 @@
+plugins {
+    id 'fabric-loom' version '1.14.10'
+    id 'maven-publish'
+    id 'com.gradleup.shadow' version '9.0.0-beta15'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven { url "https://maven.fabricmc.net/" }
+    maven { url "https://jitpack.io" }
+    maven { url "https://maven.meteordev.org/releases" }
+    maven { url "https://maven.meteordev.org" }
+}
+
+dependencies {
+    minecraft("com.mojang:minecraft:${project.minecraft_version}")
+    mappings("net.fabricmc:yarn:${project.yarn_mappings}:v2")
+    modImplementation("net.fabricmc:fabric-loader:${project.loader_version}")
+    modImplementation("net.fabricmc.fabric-api:fabric-api:${project.fabric_version}")
+    include implementation("meteordevelopment:discord-ipc:1.1")
+    include implementation("meteordevelopment:orbit:0.2.3")
+    implementation(shadow("dev.redstones.mediaplayerinfo:media-player-info:0.1.0"))
+    compileOnly("org.projectlombok:lombok:1.18.38")
+    annotationProcessor("org.projectlombok:lombok:1.18.38")
+    include implementation("net.java.dev.jna:jna:5.14.0")
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+    it.options.compilerArgs.addAll(["-Xmaxerrs", "100000"])
+    if (21 >= 10 || JavaVersion.current().isJava10Compatible()) it.options.release.set(21)
+}
+
+loom {
+    accessWidenerPath = file("src/main/resources/minced.accesswidener")
+    mixin {
+        useLegacyMixinAp = true
+        defaultRefmapName = "minced-refmap.json"
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+}
+
+// Minecraft 1.21.11 must also be launched on Java 21. Merely setting the
+// compiler release still allowed Loom's run tasks to inherit a newer JVM.
+tasks.withType(JavaExec).configureEach {
+    javaLauncher.set(javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    })
+}
+
+jar {
+    from("LICENSE.txt") {
+        rename { "${it}_${project.archivesBaseName}" }
+    }
+}
+
+shadowJar {
+    exclude("org/objectweb/**")
+    configurations = [project.configurations.shadow]
+    archiveClassifier.set("dev")
+}
+
+remapJar {
+    dependsOn(shadowJar)
+    inputFile = tasks.shadowJar.archiveFile
+}
+tasks.register('dumpCp') {
+    doLast {
+        def f = new File(rootProject.projectDir, "cp.txt")
+        f.text = sourceSets.main.compileClasspath.files.collect { it.absolutePath }.join(File.pathSeparator)
+        println "wrote " + f
+    }
+}
